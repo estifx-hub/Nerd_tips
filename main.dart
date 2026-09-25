@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 const kBg = Color(0xFF121212);
 const kCard = Color(0xFF1E1E1E);
@@ -26,7 +27,12 @@ class Ads {
 class Article {
   final String id, title, desc, body, category;
   final DateTime date;
-  const Article(this.id, this.title, this.desc, this.body, this.category, this.date);
+  /// Optional. Set both for software-directory entries: link is the Play
+  /// Store/website URL, linkLabel is the clickable text shown inline in the
+  /// body (e.g. "Download Bitwarden"). Leave both null for plain articles.
+  final String? link;
+  final String? linkLabel;
+  const Article(this.id, this.title, this.desc, this.body, this.category, this.date, {this.link, this.linkLabel});
 }
 
 const categories = ['AI', 'Software', 'Security', 'Mobile', 'Dev Tools'];
@@ -42,13 +48,15 @@ final articles = <Article>[
   Article('1', '5 AI prompts that save you an hour a day', 'Simple prompts for summaries, emails and daily planning.',
       'Start with a clear role, give the context, and say exactly what format you want back. Ask for a summary, then ask for the three most important actions. Always check facts before you share the result.', 'AI', DateTime(2026, 9, 22)),
   Article('2', 'Bitwarden: a free, open-source password manager', 'Software directory: store and autofill strong passwords on every device.',
-      'Bitwarden stores your logins in an encrypted vault, generates strong passwords and fills them into apps and websites. It has a free tier and works on phones, browsers and desktops.', 'Software', DateTime(2026, 9, 20)),
+      'Bitwarden stores your logins in an encrypted vault, generates strong passwords and fills them into apps and websites. It has a free tier and works on phones, browsers and desktops.', 'Software', DateTime(2026, 9, 20),
+      link: 'https://play.google.com/store/apps/details?id=com.x8bit.bitwarden', linkLabel: 'Download Bitwarden'),
   Article('3', 'Turn on two-step verification everywhere', 'The single best upgrade for your account security.',
       'Use an authenticator app instead of SMS where possible. Save your backup codes somewhere offline. Start with email, banking and social accounts.', 'Security', DateTime(2026, 9, 18)),
   Article('4', 'Speed up your Android phone in 5 minutes', 'Clear cache, remove unused apps and update your system.',
       'Uninstall apps you have not opened in months, clear the cache of heavy apps, and keep at least 10 percent of storage free. Restart the phone once a week.', 'Mobile', DateTime(2026, 9, 15)),
   Article('5', 'Visual Studio Code: a lightweight code editor', 'Software directory: a free editor with thousands of extensions.',
-      'Visual Studio Code supports many languages, has built-in Git tools and a large extension library. It runs on Windows, macOS and Linux.', 'Dev Tools', DateTime(2026, 9, 12)),
+      'Visual Studio Code supports many languages, has built-in Git tools and a large extension library. It runs on Windows, macOS and Linux.', 'Dev Tools', DateTime(2026, 9, 12),
+      link: 'https://code.visualstudio.com/', linkLabel: 'Download VS Code'),
   Article('6', 'How to fact-check AI answers', 'Use AI as a starting point, not the final word.',
       'Ask the assistant for sources, open them yourself, and compare at least two independent references before you rely on a number, date or quote.', 'AI', DateTime(2026, 9, 9)),
   Article('7', 'Obsidian: notes stored as plain files', 'Software directory: link your notes into a personal knowledge base.',
@@ -468,8 +476,24 @@ class _ArticleScreenState extends State<ArticleScreen> {
         Text(a.desc, style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w500)),
         const SizedBox(height: 16),
         Text(a.body, style: const TextStyle(color: Colors.white70, fontSize: 16, height: 1.6)),
+        if (a.link != null) ...[
+          const SizedBox(height: 20),
+          InkWell(
+            onTap: () async {
+              final uri = Uri.parse(a.link!);
+              if (await canLaunchUrl(uri)) {
+                await launchUrl(uri, mode: LaunchMode.externalApplication);
+              }
+            },
+            child: Text(
+              a.linkLabel ?? 'Open link',
+              style: const TextStyle(color: kAccent, fontSize: 16, decoration: TextDecoration.underline, decorationColor: kAccent),
+            ),
+          ),
+        ],
       ]),
       bottomNavigationBar: const SafeArea(child: BannerAdWidget()),
     );
   }
 }
+  
