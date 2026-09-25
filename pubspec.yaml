@@ -1,3 +1,4 @@
+
 name: nerd_tips
 description: Nerd Tips - tech editorial and software directory
 publish_to: none
@@ -9,6 +10,6 @@ dependencies:
     sdk: flutter
   google_mobile_ads: ^5.2.0
   shared_preferences: ^2.2.3
+  url_launcher: ^6.3.0
 flutter:
   uses-material-design: true
-
