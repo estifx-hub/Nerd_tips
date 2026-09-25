@@ -11,7 +11,7 @@ jobs:
           java-version: 17
       - uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: '3.24.5'
       - name: Arrange files
         run: mkdir -p lib && mv main.dart lib/
       - name: Create Android project
