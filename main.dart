@@ -65,7 +65,7 @@ class InterstitialManager {
   static InterstitialAd? _ad;
   static bool _loading = false;
   static DateTime _last = DateTime.fromMillisecondsSinceEpoch(0);
-  static const cooldown = Duration(seconds: 45);
+  static const cooldown = Duration(seconds: 15);
 
   static void load() {
     if (_loading || _ad != null) return;
@@ -191,7 +191,7 @@ class _NativeState extends State<NativeAdCard> with AutomaticKeepAliveClientMixi
         onAdFailedToLoad: (ad, e) { ad.dispose(); _ad = null; },
       ),
       nativeTemplateStyle: NativeTemplateStyle(
-        templateType: TemplateType.small,
+        templateType: TemplateType.medium,
         mainBackgroundColor: kCard,
         cornerRadius: 16,
         callToActionTextStyle: NativeTemplateTextStyle(
@@ -215,7 +215,7 @@ class _NativeState extends State<NativeAdCard> with AutomaticKeepAliveClientMixi
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 320, minHeight: 90, maxHeight: 120),
+          constraints: const BoxConstraints(minWidth: 320, minHeight: 250, maxHeight: 330),
           child: AdWidget(ad: _ad!),
         ),
       ),
@@ -425,10 +425,11 @@ class FeedList extends StatelessWidget {
     final n = items.length;
     return ListView.builder(
       padding: const EdgeInsets.only(bottom: 12),
-      itemCount: n + (n - 1) ~/ 4,
+      itemCount: n + n ~/ 2,
       itemBuilder: (_, i) {
-        if (i % 5 == 4) return const NativeAdCard();
-        final a = items[i - i ~/ 5];
+        final adsBefore = (i + 1) ~/ 3;
+        if (i % 3 == 2) return const NativeAdCard();
+        final a = items[i - adsBefore];
         return ArticleCard(a: a, fav: favs.contains(a.id), onTap: () => onOpen(a), onFav: () => onFav(a));
       },
     );
