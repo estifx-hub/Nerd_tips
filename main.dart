@@ -8,8 +8,6 @@ const kBg = Color(0xFF121212);
 const kCard = Color(0xFF1E1E1E);
 const kAccent = Color(0xFF4FC3F7);
 
-/// Release builds use your real AdMob IDs. Debug builds use Google's test IDs
-/// so you never generate invalid traffic on your own account while developing.
 class Ads {
   static const bool useReal = kReleaseMode;
   static String get banner => useReal
@@ -21,15 +19,14 @@ class Ads {
   static String get interstitial => useReal
       ? 'ca-app-pub-4394160099384807/1787942503'
       : 'ca-app-pub-3940256099942544/1033173712';
+  static String get rewarded => useReal
+      ? 'ca-app-pub-4394160099384807/5387296225'
+      : 'ca-app-pub-3940256099942544/5224354917';
 }
 
-// ---------------------------------------------------------------- data
 class Article {
   final String id, title, desc, body, category;
   final DateTime date;
-  /// Optional. Set both for software-directory entries: link is the Play
-  /// Store/website URL, linkLabel is the clickable text shown inline in the
-  /// body (e.g. "Download Bitwarden"). Leave both null for plain articles.
   final String? link;
   final String? linkLabel;
   const Article(this.id, this.title, this.desc, this.body, this.category, this.date, {this.link, this.linkLabel});
@@ -43,7 +40,6 @@ String fmtDate(DateTime d) {
   return '${m[d.month - 1]} ${d.day.toString().padLeft(2, '0')}, ${d.year}';
 }
 
-// Replace or extend with your own original articles and software entries.
 final articles = <Article>[
   Article('1', '5 AI prompts that save you an hour a day', 'Simple prompts for summaries, emails and daily planning.',
       'Start with a clear role, give the context, and say exactly what format you want back. Ask for a summary, then ask for the three most important actions. Always check facts before you share the result.', 'AI', DateTime(2026, 9, 22)),
@@ -65,12 +61,10 @@ final articles = <Article>[
       'A commit is a saved snapshot. A branch lets you try changes safely. Push sends your commits to a remote copy such as GitHub.', 'Dev Tools', DateTime(2026, 9, 3)),
 ];
 
-// ---------------------------------------------------------------- ads
 class InterstitialManager {
   static InterstitialAd? _ad;
   static bool _loading = false;
   static DateTime _last = DateTime.fromMillisecondsSinceEpoch(0);
-  /// Minimum gap between interstitials. Set to Duration.zero to show on every tap.
   static const cooldown = Duration(seconds: 45);
 
   static void load() {
@@ -86,7 +80,6 @@ class InterstitialManager {
     );
   }
 
-  /// Shows the interstitial (if ready and cooldown passed), then runs [next].
   static void showThen(VoidCallback next) {
     final ad = _ad;
     if (ad == null || DateTime.now().difference(_last) < cooldown) {
@@ -100,6 +93,39 @@ class InterstitialManager {
       onAdFailedToShowFullScreenContent: (a, e) { a.dispose(); load(); next(); },
     );
     ad.show();
+  }
+}
+
+class RewardedManager {
+  static RewardedAd? _ad;
+  static bool _loading = false;
+
+  static void load() {
+    if (_loading || _ad != null) return;
+    _loading = true;
+    RewardedAd.load(
+      adUnitId: Ads.rewarded,
+      request: const AdRequest(),
+      rewardedAdLoadCallback: RewardedAdLoadCallback(
+        onAdLoaded: (ad) { _ad = ad; _loading = false; },
+        onAdFailedToLoad: (_) { _ad = null; _loading = false; },
+      ),
+    );
+  }
+
+  static void show({required VoidCallback onEarned, required VoidCallback onUnavailable}) {
+    final ad = _ad;
+    if (ad == null) {
+      load();
+      onUnavailable();
+      return;
+    }
+    _ad = null;
+    ad.fullScreenContentCallback = FullScreenContentCallback(
+      onAdDismissedFullScreenContent: (a) { a.dispose(); load(); },
+      onAdFailedToShowFullScreenContent: (a, e) { a.dispose(); load(); onUnavailable(); },
+    );
+    ad.show(onUserEarnedReward: (_, __) => onEarned());
   }
 }
 
@@ -197,42 +223,88 @@ class _NativeState extends State<NativeAdCard> with AutomaticKeepAliveClientMixi
   }
 }
 
-// ---------------------------------------------------------------- app
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await MobileAds.instance.initialize();
   InterstitialManager.load();
+  RewardedManager.load();
   final prefs = await SharedPreferences.getInstance();
   runApp(NerdTipsApp(prefs: prefs));
 }
 
-class NerdTipsApp extends StatelessWidget {
+const kAppVersion = '1.0.0';
+const kPlayStoreUrl = 'https://play.google.com/store/apps/details?id=com.nerdtips.nerd_tips';
+
+class NerdTipsApp extends StatefulWidget {
   final SharedPreferences prefs;
   const NerdTipsApp({super.key, required this.prefs});
+  @override
+  State<NerdTipsApp> createState() => _NerdTipsAppState();
+}
+
+class _NerdTipsAppState extends State<NerdTipsApp> {
+  late bool darkMode = widget.prefs.getBool('darkMode') ?? true;
+  late double textScale = widget.prefs.getDouble('textScale') ?? 1.0;
+
+  void setDarkMode(bool v) {
+    setState(() => darkMode = v);
+    widget.prefs.setBool('darkMode', v);
+  }
+
+  void setTextScale(double v) {
+    setState(() => textScale = v);
+    widget.prefs.setDouble('textScale', v);
+  }
 
   @override
-  Widget build(BuildContext context) => MaterialApp(
-        title: 'Nerd Tips',
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          useMaterial3: true,
-          brightness: Brightness.dark,
-          scaffoldBackgroundColor: kBg,
-          colorScheme: const ColorScheme.dark(primary: kAccent, surface: kCard),
-          cardColor: kCard,
-          appBarTheme: const AppBarTheme(backgroundColor: kBg, elevation: 0),
-          navigationBarTheme: NavigationBarThemeData(
-            backgroundColor: kCard,
-            indicatorColor: kAccent.withOpacity(0.25),
-          ),
-        ),
-        home: Shell(prefs: prefs),
-      );
+  Widget build(BuildContext context) {
+    final light = ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.light,
+      scaffoldBackgroundColor: Colors.white,
+      colorScheme: const ColorScheme.light(primary: Color(0xFF0288D1), surface: Colors.white),
+      appBarTheme: const AppBarTheme(backgroundColor: Colors.white, elevation: 0, foregroundColor: Colors.black),
+      navigationBarTheme: const NavigationBarThemeData(backgroundColor: Color(0xFFF2F2F2)),
+    );
+    final dark = ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.dark,
+      scaffoldBackgroundColor: kBg,
+      colorScheme: const ColorScheme.dark(primary: kAccent, surface: kCard),
+      cardColor: kCard,
+      appBarTheme: const AppBarTheme(backgroundColor: kBg, elevation: 0),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: kCard,
+        indicatorColor: kAccent.withOpacity(0.25),
+      ),
+    );
+    return MaterialApp(
+      title: 'Nerd Tips',
+      debugShowCheckedModeBanner: false,
+      theme: darkMode ? dark : light,
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(textScale)),
+        child: child!,
+      ),
+      home: Shell(
+        prefs: widget.prefs,
+        darkMode: darkMode,
+        textScale: textScale,
+        onDarkModeChanged: setDarkMode,
+        onTextScaleChanged: setTextScale,
+      ),
+    );
+  }
 }
 
 class Shell extends StatefulWidget {
   final SharedPreferences prefs;
-  const Shell({super.key, required this.prefs});
+  final bool darkMode;
+  final double textScale;
+  final ValueChanged<bool> onDarkModeChanged;
+  final ValueChanged<double> onTextScaleChanged;
+  const Shell({super.key, required this.prefs, required this.darkMode, required this.textScale,
+    required this.onDarkModeChanged, required this.onTextScaleChanged});
   @override
   State<Shell> createState() => _ShellState();
 }
@@ -268,7 +340,18 @@ class _ShellState extends State<Shell> {
     return Scaffold(
       body: SafeArea(
         child: Column(children: [
-          if (tab == 0) SearchHeader(onChanged: (v) => setState(() => query = v)),
+          if (tab == 0) SearchHeader(
+            onChanged: (v) => setState(() => query = v),
+            onSettings: () => Navigator.push(context, MaterialPageRoute(
+                builder: (_) => SettingsScreen(
+                      prefs: widget.prefs,
+                      darkMode: widget.darkMode,
+                      textScale: widget.textScale,
+                      onDarkModeChanged: widget.onDarkModeChanged,
+                      onTextScaleChanged: widget.onTextScaleChanged,
+                      onCacheCleared: () => setState(() {}),
+                    ))),
+          ),
           Expanded(child: pages[tab]),
           const BannerAdWidget(),
         ]),
@@ -288,34 +371,42 @@ class _ShellState extends State<Shell> {
 
 class SearchHeader extends StatelessWidget {
   final ValueChanged<String> onChanged;
-  const SearchHeader({super.key, required this.onChanged});
+  final VoidCallback onSettings;
+  const SearchHeader({super.key, required this.onChanged, required this.onSettings});
 
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-        child: Container(
-          height: 52,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          decoration: BoxDecoration(color: kCard, borderRadius: BorderRadius.circular(28)),
-          child: Row(children: [
-            const Icon(Icons.search, color: Colors.white70),
-            const SizedBox(width: 12),
-            Expanded(
-              child: TextField(
-                onChanged: onChanged,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  hintText: 'Search Nerd Tips',
-                  hintStyle: TextStyle(color: Colors.white54),
-                  border: InputBorder.none,
-                ),
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      child: Container(
+        height: 52,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: BoxDecoration(color: cs.surface, borderRadius: BorderRadius.circular(28)),
+        child: Row(children: [
+          Icon(Icons.search, color: cs.onSurface.withOpacity(0.6)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: TextField(
+              onChanged: onChanged,
+              style: TextStyle(color: cs.onSurface),
+              decoration: InputDecoration(
+                hintText: 'Search Nerd Tips',
+                hintStyle: TextStyle(color: cs.onSurface.withOpacity(0.5)),
+                border: InputBorder.none,
               ),
             ),
-            const CircleAvatar(radius: 16, backgroundColor: kAccent,
-                child: Icon(Icons.bolt, color: Colors.black, size: 20)),
-          ]),
-        ),
-      );
+          ),
+          InkWell(
+            onTap: onSettings,
+            borderRadius: BorderRadius.circular(20),
+            child: const CircleAvatar(radius: 16, backgroundColor: kAccent,
+                child: Icon(Icons.settings, color: Colors.black, size: 18)),
+          ),
+        ]),
+      ),
+    );
+  }
 }
 
 class FeedList extends StatelessWidget {
@@ -334,7 +425,7 @@ class FeedList extends StatelessWidget {
     final n = items.length;
     return ListView.builder(
       padding: const EdgeInsets.only(bottom: 12),
-      itemCount: n + (n - 1) ~/ 4, // one native ad after every 4 cards
+      itemCount: n + (n - 1) ~/ 4,
       itemBuilder: (_, i) {
         if (i % 5 == 4) return const NativeAdCard();
         final a = items[i - i ~/ 5];
@@ -496,4 +587,147 @@ class _ArticleScreenState extends State<ArticleScreen> {
     );
   }
 }
-  
+
+const kPrivacyPolicy = '''
+Nerd Tips is built by you (the developer) as a free app.
+
+This page explains what information the app collects when you use it.
+
+Information Collection and Use
+Nerd Tips does not require an account and does not collect personal information such as your name or email. Your favorites and app preferences (dark mode, text size) are stored only on your own device.
+
+Advertising
+This app uses Google AdMob to show ads. AdMob may collect device identifiers (such as the advertising ID) to show relevant ads and measure performance. You can review Google's practices here:
+https://policies.google.com/technologies/ads
+
+Children's Privacy
+This app is not directed at children under 13. We do not knowingly collect personal information from children.
+
+Changes to This Policy
+This policy may be updated occasionally. Continued use of the app after changes means you accept the updated policy.
+
+Contact
+If you have questions about this policy, contact: estifanosmesfin8@gmail.com
+''';
+
+class SettingsScreen extends StatefulWidget {
+  final SharedPreferences prefs;
+  final bool darkMode;
+  final double textScale;
+  final ValueChanged<bool> onDarkModeChanged;
+  final ValueChanged<double> onTextScaleChanged;
+  final VoidCallback onCacheCleared;
+  const SettingsScreen({super.key, required this.prefs, required this.darkMode, required this.textScale,
+    required this.onDarkModeChanged, required this.onTextScaleChanged, required this.onCacheCleared});
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  void _clearCache() {
+    widget.prefs.remove('favs');
+    widget.onCacheCleared();
+    ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cache and favorites cleared')));
+  }
+
+  void _rateApp() async {
+    final uri = Uri.parse(kPlayStoreUrl);
+    if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  void _shareApp() async {
+    final uri = Uri.parse('https://wa.me/?text=${Uri.encodeComponent('Check out Nerd Tips: $kPlayStoreUrl')}');
+    if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  void _watchRewarded() {
+    RewardedManager.show(
+      onEarned: () {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Thanks for supporting Nerd Tips!')));
+      },
+      onUnavailable: () {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No ad available right now — try again in a moment')));
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Settings')),
+      body: ListView(children: [
+        const _SectionHeader('General'),
+        SwitchListTile(
+          title: const Text('Dark mode'),
+          subtitle: const Text('Better eyesight and power saving'),
+          value: widget.darkMode,
+          onChanged: widget.onDarkModeChanged,
+        ),
+        ListTile(
+          title: const Text('Text size'),
+          subtitle: Slider(
+            value: widget.textScale,
+            min: 0.85,
+            max: 1.3,
+            divisions: 3,
+            label: widget.textScale.toStringAsFixed(2),
+            onChanged: widget.onTextScaleChanged,
+          ),
+        ),
+        const Divider(),
+        const _SectionHeader('Cache'),
+        ListTile(
+          leading: const Icon(Icons.delete_outline),
+          title: const Text('Clear cache & favorites'),
+          onTap: _clearCache,
+        ),
+        const Divider(),
+        const _SectionHeader('Privacy'),
+        ListTile(
+          leading: const Icon(Icons.privacy_tip_outlined),
+          title: const Text('Privacy policy'),
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen())),
+        ),
+        const Divider(),
+        const _SectionHeader('About'),
+        const ListTile(leading: Icon(Icons.info_outline), title: Text('Version'), trailing: Text(kAppVersion)),
+        ListTile(leading: const Icon(Icons.star_border), title: const Text('Rate this app'), onTap: _rateApp),
+        ListTile(leading: const Icon(Icons.share_outlined), title: const Text('Share this app'), onTap: _shareApp),
+        const Divider(),
+        const _SectionHeader('Support'),
+        ListTile(
+          leading: const Icon(Icons.favorite_outline, color: kAccent),
+          title: const Text('Support the developer'),
+          subtitle: const Text('Watch a short ad — costs you nothing extra'),
+          onTap: _watchRewarded,
+        ),
+      ]),
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  final String text;
+  const _SectionHeader(this.text);
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
+        child: Text(text, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: kAccent)),
+      );
+}
+
+class PrivacyPolicyScreen extends StatelessWidget {
+  const PrivacyPolicyScreen({super.key});
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: const Text('Privacy policy')),
+        body: ListView(padding: const EdgeInsets.all(20), children: [
+          Text(kPrivacyPolicy, style: const TextStyle(fontSize: 15, height: 1.5)),
+        ]),
+      );
+}
